@@ -1,5 +1,5 @@
 export const peso = (v) =>
-  `P${parseFloat(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  `₱${parseFloat(v || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 const AV_COLORS = ['#0ea5e9', '#22c55e', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4']
 export const avColor = (n) => AV_COLORS[n.charCodeAt(0) % AV_COLORS.length]
