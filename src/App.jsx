@@ -4,20 +4,14 @@ import {
   INITIAL_USERS, INITIAL_ICE_STOCK, INITIAL_VENDORS, INITIAL_SERVICES,
   INITIAL_CUSTOMERS, INITIAL_ORDERS, INITIAL_CIO_RECORDS, INITIAL_ROUTES,
   INITIAL_TOOL_ITEMS, INITIAL_EXPENSES, INITIAL_CLOCK_RECORDS, INITIAL_BROKEN_ICE,
-  INITIAL_SOAS, EXPENSE_CATEGORIES, DAILY_CAPACITY,
-  ADMIN_TABS, ASSISTANT_TABS, OPERATOR_TABS, STAFF_TABS
+  INITIAL_SOAS, INITIAL_FEATURE_FLAGS, ALL_PAGES, EXPENSE_CATEGORIES, DAILY_CAPACITY,
+  ADMIN_TABS, ASSISTANT_TABS, OPERATOR_TABS, STAFF_TABS, SUPERADMIN_TABS
 } from './data.js'
 import { peso, avColor, initials, computeStock, getCustomer, getService } from './utils.js'
 
 Chart.register(...registerables)
 
-const SNOWFLAKE = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2">
-    <line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
-    <path d="M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07"/>
-    <circle cx="12" cy="12" r="2"/>
-  </svg>
-)
+
 const SEARCH_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -45,6 +39,7 @@ export default function App() {
   const [clockRecords, setClockRecords] = useState(INITIAL_CLOCK_RECORDS)
   const [brokenIce, setBrokenIce] = useState(INITIAL_BROKEN_ICE)
   const [soas, setSoas] = useState(INITIAL_SOAS)
+  const [featureFlags, setFeatureFlags] = useState(INITIAL_FEATURE_FLAGS)
   // ID counters
   const nextOrderNum = useRef(6)
   const nextVendorId = useRef(10)
@@ -134,16 +129,25 @@ export default function App() {
   }, [])
 
   const curStock = computeStock(cioRecords)
-  const ROLE_TABS = { admin: ADMIN_TABS, assistant: ASSISTANT_TABS, operator: OPERATOR_TABS, staff: STAFF_TABS }
-  const tabs = currentUser ? (ROLE_TABS[currentUser.role] || STAFF_TABS) : []
+  const ROLE_TABS = { superadmin: SUPERADMIN_TABS, admin: ADMIN_TABS, assistant: ASSISTANT_TABS, operator: OPERATOR_TABS, staff: STAFF_TABS }
+  const rawTabs = currentUser ? (ROLE_TABS[currentUser.role] || STAFF_TABS) : []
+  // Filter tabs by feature flags (superadmin always sees all)
+  const tabs = currentUser?.role === 'superadmin'
+    ? rawTabs
+    : rawTabs.filter(t => featureFlags.pages[t.id] !== false)
 
-  function doLogin() {
-    const found = appUsers.find(u => u.username === loginUser.trim() && u.password === loginPass && u.status === 'Active')
+  function loginWith(username, password) {
+    const found = appUsers.find(u => u.username === username.trim() && u.password === password && u.status === 'Active')
     if (!found) { setLoginError(true); return }
     setLoginError(false)
+    const userTabs = ROLE_TABS[found.role] || STAFF_TABS
+    const allowedTabs = found.role === 'superadmin' ? userTabs : userTabs.filter(t => featureFlags.pages[t.id] !== false)
+    const firstPage = allowedTabs[0]?.id || 'dashboard'
     setCurrentUser({ ...found, lastLogin: new Date().toISOString() })
-    setPage('dashboard')
+    setPage(firstPage)
   }
+
+  function doLogin() { loginWith(loginUser, loginPass) }
 
   function doLogout() {
     setCurrentUser(null); setPage('dashboard'); setDrawerOpen(false); setModal(null)
@@ -184,7 +188,7 @@ export default function App() {
   const orderTotalBlocks = orderLines.reduce((s, l) => s + (parseInt(l.qty) || 0), 0)
 
   function openCreateOrder() {
-    if (currentUser?.role !== 'admin') { toast('Admin access required'); return }
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') { toast('Admin access required'); return }
     const defaultPrice = iceStock.costPerBlock > 0 ? String(Math.round(iceStock.costPerBlock * 1.5)) : '25'
     const today = new Date().toISOString().split('T')[0]
     const due = new Date(); due.setDate(due.getDate() + 7)
@@ -223,6 +227,7 @@ export default function App() {
       plate_number: orderForm.plateNumber.trim(),
       created_by: currentUser.name,
       created_at: new Date().toISOString(),
+      approved_for_invoicing: false,
       invoiced: false
     }
     setOrders(prev => [newOrder, ...prev])
@@ -233,7 +238,7 @@ export default function App() {
 
   // ── SERVICES ──
   function openServiceModal(id = null) {
-    if (currentUser?.role !== 'admin') { toast('Admin access required'); return }
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') { toast('Admin access required'); return }
     setEditServiceId(id)
     if (id) {
       const s = services.find(sv => sv.id === id)
@@ -278,7 +283,7 @@ export default function App() {
 
   // ── VENDORS ──
   function openVendorModal(id = null) {
-    if (currentUser?.role !== 'admin') { toast('Admin access required'); return }
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') { toast('Admin access required'); return }
     setEditVendorId(id)
     if (id) {
       const v = vendors.find(vn => vn.id === id)
@@ -300,7 +305,7 @@ export default function App() {
 
   // ── ROUTES ──
   function openRouteModal(id = null) {
-    if (currentUser?.role !== 'admin') { toast('Admin access required'); return }
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') { toast('Admin access required'); return }
     setEditRouteId(id)
     if (id) {
       const r = routes.find(rt => rt.id === id)
@@ -475,6 +480,15 @@ export default function App() {
     toast(`Order ${orderId} → ${deliveryStatus}`)
   }
 
+  function toggleApproval(orderId) {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o
+      const next = !o.approved_for_invoicing
+      toast(`${orderId} ${next ? 'approved for SOA' : 'approval removed'}`)
+      return { ...o, approved_for_invoicing: next }
+    }))
+  }
+
   function getWeekNumber(date) {
     const d = new Date(date); d.setHours(0, 0, 0, 0)
     d.setDate(d.getDate() + 4 - (d.getDay() || 7))
@@ -517,7 +531,7 @@ export default function App() {
     closeModal(); toast('Order cancelled — blocks returned to stock')
   }
   function openMarkPaid(id) {
-    if (currentUser?.role !== 'admin') { toast('Admin access required'); return }
+    if (currentUser?.role !== 'admin' && currentUser?.role !== 'superadmin') { toast('Admin access required'); return }
     setMarkingPaidId(id)
     const o = orders.find(o => o.id === id)
     setPaidForm({ method: 'Cash', date: new Date().toISOString().split('T')[0], checkNum: '', amount: String(o?.total?.toFixed(2) || ''), staff: currentUser.name, notes: '' })
@@ -588,7 +602,7 @@ export default function App() {
     }
 
     return `<div class="receipt-header">
-  <div class="receipt-logo">IceFlow</div>
+  <img src="/logo.png.png" alt="OLC Ice Plant" style="height:70px;object-fit:contain;" />
   <div class="receipt-sub">Official Invoice</div>
 </div>
 <div class="receipt-body">
@@ -631,9 +645,9 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  if (!currentUser) return <LoginScreen loginUser={loginUser} setLoginUser={setLoginUser} loginPass={loginPass} setLoginPass={setLoginPass} loginError={loginError} onLogin={doLogin} onFill={(u, p) => { setLoginUser(u); setLoginPass(p); setLoginError(false) }} />
+  if (!currentUser) return <LoginScreen loginUser={loginUser} setLoginUser={setLoginUser} loginPass={loginPass} setLoginPass={setLoginPass} loginError={loginError} onLogin={doLogin} onFill={(u, p) => loginWith(u, p)} />
 
-  const isAdmin = currentUser.role === 'admin'
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'superadmin'
   const isAssistant = currentUser.role === 'assistant'
 
   return (
@@ -643,8 +657,7 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
       {/* Drawer */}
       <div className={`drawer${drawerOpen ? ' open' : ''}`}>
         <div className="drawer-header">
-          <div className="nav-brand-icon">{SNOWFLAKE}</div>
-          <div className="drawer-logo">Ice<span>Flow</span></div>
+          <img src="/logo.png.png" alt="OLC Ice Plant" style={{ height: 56, objectFit: 'contain' }} />
         </div>
         <div className="drawer-user">
           <div className="user-avatar" style={{ background: avColor(currentUser.name), width: 36, height: 36, fontSize: 13 }}>{initials(currentUser.name)}</div>
@@ -671,8 +684,7 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
           <span /><span /><span />
         </button>
         <div className="nav-brand" style={{ marginLeft: 6 }}>
-          <div className="nav-brand-icon">{SNOWFLAKE}</div>
-          <div className="nav-logo">Ice<span>Flow</span></div>
+          <img src="/logo.png.png" alt="OLC Ice Plant" style={{ height: 40, objectFit: 'contain' }} />
         </div>
         <div className="nav-tabs">
           {tabs.map(t => (
@@ -687,6 +699,7 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
               <div className="user-role-tag">{currentUser.role}</div>
             </div>
           </div>
+          <button className="btn btn-danger" style={{ marginLeft: 10, padding: '6px 14px', fontSize: 13 }} onClick={doLogout}>Log Out</button>
         </div>
       </nav>
 
@@ -701,7 +714,7 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
         {page === 'inventory' && <InventoryPage iceStock={iceStock} vendors={vendors} cioRecords={cioRecords} toolItems={toolItems} brokenIce={brokenIce} brokenForm={brokenForm} setBrokenForm={setBrokenForm} brokenSearch={brokenSearch} setBrokenSearch={setBrokenSearch} orders={orders} curStock={curStock} peso={peso} isAdmin={isAdmin} onStockSettings={openStockSettings} onAddItem={() => openToolModal(null)} onEditTool={id => openToolModal(id)} onDeleteTool={deleteTool} onViewLog={() => setPage('checkinout')} onSubmitBroken={submitBrokenIce} onDeleteBroken={deleteBrokenIce} />}
         {page === 'checkinout' && <StockLogPage cioRecords={cioRecords} cioForm={cioForm} setCioForm={setCioForm} onSubmitCIO={submitCIO} cioSearch={cioSearch} setCioSearch={setCioSearch} cioFilter={cioFilter} setCioFilter={setCioFilter} />}
         {page === 'tools-cio' && <ToolsCIOPage toolItems={toolItems} toolCIORecords={toolCIORecords} tcioForm={tcioForm} setTcioForm={setTcioForm} onSubmit={submitToolCIO} tcioSearch={tcioSearch} setTcioSearch={setTcioSearch} tcioFilter={tcioFilter} setTcioFilter={setTcioFilter} />}
-        {page === 'orders' && <OrdersPage orders={autoFlaggedOrders} customers={customers} services={services} isAdmin={isAdmin} peso={peso} orderSearch={orderSearch} setOrderSearch={setOrderSearch} orderFilter={orderFilter} setOrderFilter={setOrderFilter} onNewOrder={openCreateOrder} onViewOrder={viewOrder} onMarkPaid={openMarkPaid} onMarkOverdue={markOverdue} onUpdateDelivery={updateDeliveryStatus} />}
+        {page === 'orders' && <OrdersPage orders={autoFlaggedOrders} customers={customers} services={services} isAdmin={isAdmin} peso={peso} orderSearch={orderSearch} setOrderSearch={setOrderSearch} orderFilter={orderFilter} setOrderFilter={setOrderFilter} onNewOrder={openCreateOrder} onViewOrder={viewOrder} onMarkPaid={openMarkPaid} onMarkOverdue={markOverdue} onUpdateDelivery={updateDeliveryStatus} onToggleApproval={toggleApproval} />}
         {page === 'soa' && <SOAPage orders={autoFlaggedOrders} soas={soas} customers={customers} peso={peso} soaCustFilter={soaCustFilter} setSoaCustFilter={setSoaCustFilter} onGenerate={generateSOA} onViewOrder={viewOrder} />}
         {page === 'services' && <ServicesPage services={services} isAdmin={isAdmin} peso={peso} onAdd={() => openServiceModal()} onEdit={openServiceModal} onDelete={deleteService} />}
         {page === 'customers' && <CustomersPage customers={customers} orders={autoFlaggedOrders} isAdmin={isAdmin} peso={peso} custSearch={custSearch} setCustSearch={setCustSearch} reminderDays={reminderDays} setReminderDays={setReminderDays} viewingCustomerId={viewingCustomerId} setViewingCustomerId={setViewingCustomerId} onAdd={() => openCustomerModal()} onEdit={openCustomerModal} onDelete={deleteCustomer} onViewOrders={(cid) => { setOrderSearch(customers.find(c=>c.id===cid)?.name||''); setPage('orders') }} />}
@@ -710,6 +723,7 @@ ${o.payment ? `<div style="padding:12px 16px;background:rgba(34,197,94,0.08);bor
         {page === 'expenses' && <ExpensesPage expenses={expenses} isAdmin={isAdmin} peso={peso} expenseSearch={expenseSearch} setExpenseSearch={setExpenseSearch} expenseCatFilter={expenseCatFilter} setExpenseCatFilter={setExpenseCatFilter} onAdd={() => openExpenseModal()} onEdit={openExpenseModal} onDelete={deleteExpense} />}
         {page === 'clock' && <ClockPage appUsers={appUsers} clockRecords={clockRecords} currentUser={currentUser} clockForm={clockForm} setClockForm={setClockForm} clockSearch={clockSearch} setClockSearch={setClockSearch} onSubmit={submitClock} onClockOut={clockOut} onDelete={deleteClockRecord} />}
         {page === 'reports' && <ReportsPage orders={autoFlaggedOrders} expenses={expenses} customers={customers} services={services} cioRecords={cioRecords} brokenIce={brokenIce} clockRecords={clockRecords} iceStock={iceStock} peso={peso} />}
+        {page === 'superadmin' && <SuperAdminPage featureFlags={featureFlags} setFeatureFlags={setFeatureFlags} appUsers={appUsers} />}
       </div>
 
       {/* Modals */}
@@ -1073,13 +1087,7 @@ function LoginScreen({ loginUser, setLoginUser, loginPass, setLoginPass, loginEr
     <div className="login-screen">
       <div className="login-card">
         <div className="login-brand">
-          <div className="login-brand-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" style={{ width: 22, height: 22 }}>
-              <line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
-              <path d="M4.93 4.93l14.14 14.14M19.07 4.93 4.93 19.07"/><circle cx="12" cy="12" r="2"/>
-            </svg>
-          </div>
-          <div className="login-logo">Ice<span>Flow</span></div>
+          <img src="/logo.png.png" alt="OLC Ice Plant" style={{ height: 90, objectFit: 'contain' }} />
         </div>
         <div className="login-tagline">Ice Inventory · Philippines</div>
         {loginError && <div className="login-error">Incorrect username or password.</div>}
@@ -1515,7 +1523,7 @@ function ToolsCIOPage({ toolItems, toolCIORecords, tcioForm, setTcioForm, onSubm
 }
 
 // ── ORDERS ──
-function OrdersPage({ orders, customers, services, isAdmin, peso, orderSearch, setOrderSearch, orderFilter, setOrderFilter, onNewOrder, onViewOrder, onMarkPaid, onMarkOverdue, onUpdateDelivery }) {
+function OrdersPage({ orders, customers, services, isAdmin, peso, orderSearch, setOrderSearch, orderFilter, setOrderFilter, onNewOrder, onViewOrder, onMarkPaid, onMarkOverdue, onUpdateDelivery, onToggleApproval }) {
   const [custFilter, setCustFilter] = useState('')
   const [deliveryFilter, setDeliveryFilter] = useState('All')
   const getCustomerN = (id) => { const c = customers.find(c => c.id === id); return c || { name: 'Unknown', phone: '' } }
@@ -1579,7 +1587,8 @@ function OrdersPage({ orders, customers, services, isAdmin, peso, orderSearch, s
                 <div className="inv-customer">{c.name}</div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                   <span className={`badge ${o.deliveryStatus === 'Sent' ? 'badge-warn' : o.deliveryStatus === 'Delivered' ? 'badge-green' : 'badge-gray'}`}>{o.deliveryStatus || 'Pending'}</span>
-                  {o.invoiced && <span className="badge badge-purple">Invoiced</span>}
+                  {o.approved_for_invoicing && !o.invoiced && <span className="badge badge-green">Approved</span>}
+                  {o.invoiced && <span className="badge badge-purple">SOA Generated</span>}
                   {o.soaNumber && <span style={{ fontSize: 10, color: 'var(--text3)', alignSelf: 'center' }}>{o.soaNumber}</span>}
                 </div>
               </div>
@@ -1601,6 +1610,11 @@ function OrdersPage({ orders, customers, services, isAdmin, peso, orderSearch, s
                 <button className="btn btn-ghost btn-sm" onClick={() => onViewOrder(o.id)}>View Invoice</button>
                 {isAdmin && o.deliveryStatus === 'Pending' && <button className="btn btn-warn btn-sm" onClick={() => onUpdateDelivery(o.id, 'Sent')}>Mark Sent</button>}
                 {isAdmin && o.deliveryStatus === 'Sent' && <button className="btn btn-ghost btn-sm" onClick={() => onUpdateDelivery(o.id, 'Delivered')}>Mark Delivered</button>}
+                {isAdmin && o.deliveryStatus === 'Sent' && !o.invoiced && (
+                  <button className={`btn btn-sm ${o.approved_for_invoicing ? 'btn-danger' : 'btn-success'}`} onClick={() => onToggleApproval(o.id)}>
+                    {o.approved_for_invoicing ? 'Revoke Approval' : 'Approve for SOA'}
+                  </button>
+                )}
                 {isAdmin && (o.status === 'Unpaid' || o.status === 'Overdue') && <button className="btn btn-success btn-sm" onClick={() => onMarkPaid(o.id)}>Mark Paid</button>}
                 {isAdmin && o.status === 'Unpaid' && <button className="btn btn-warn btn-sm" onClick={() => onMarkOverdue(o.id)}>Mark Overdue</button>}
               </div>
@@ -1779,10 +1793,17 @@ function VendorsPage({ vendors, isAdmin, vendorSearch, setVendorSearch, onAdd, o
 // ── SOA ──
 function SOAPage({ orders, soas, customers, peso, soaCustFilter, setSoaCustFilter, onGenerate, onViewOrder }) {
   const [selectedOrders, setSelectedOrders] = useState({})
+  const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0] })
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
 
   const getCustomerName = (id) => customers.find(c => c.id === id)?.name || 'Unknown'
 
-  const eligible = orders.filter(o => o.deliveryStatus === 'Sent' && !o.invoiced)
+  const eligible = orders.filter(o => {
+    const d = new Date(o.date)
+    const from = new Date(dateFrom + 'T00:00:00')
+    const to = new Date(dateTo + 'T23:59:59')
+    return o.deliveryStatus === 'Sent' && o.approved_for_invoicing && !o.invoiced && d >= from && d <= to
+  })
   const filtered = soaCustFilter ? eligible.filter(o => String(o.customerId) === soaCustFilter) : eligible
 
   const byCustomer = {}
@@ -1810,18 +1831,24 @@ function SOAPage({ orders, soas, customers, peso, soaCustFilter, setSoaCustFilte
   return (
     <div className="page">
       <div className="section-header">
-        <div><div className="section-title">Statement of Account</div><div className="section-sub">Generate SOAs from Sent orders only</div></div>
+        <div><div className="section-title">Statement of Account</div><div className="section-sub">Generate SOA from orders that are Sent and Approved for invoicing</div></div>
       </div>
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">Pending SOA</div><div className="stat-val warn">{eligible.length}</div><div className="stat-trend">Sent, not yet invoiced</div></div>
+        <div className="stat-card"><div className="stat-label">Pending SOA</div><div className="stat-val warn">{eligible.length}</div><div className="stat-trend">Sent + Approved, not yet invoiced</div></div>
         <div className="stat-card"><div className="stat-label">SOAs Generated</div><div className="stat-val accent">{soas.length}</div></div>
         <div className="stat-card"><div className="stat-label">Pending Value</div><div className="stat-val danger">{peso(eligible.reduce((s, o) => s + o.total, 0))}</div></div>
       </div>
-      <div className="toolbar" style={{ marginBottom: 16 }}>
-        <select value={soaCustFilter} onChange={e => setSoaCustFilter(e.target.value)} style={{ minWidth: 180 }}>
+      <div className="toolbar" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
+        <select value={soaCustFilter} onChange={e => setSoaCustFilter(e.target.value)} style={{ minWidth: 160 }}>
           <option value="">All Customers</option>
           {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>Period:</span>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: 140 }} />
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>→</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: 140 }} />
+        </div>
       </div>
       {Object.keys(byCustomer).length > 0 ? (
         <div style={{ marginBottom: 24 }}>
@@ -1871,7 +1898,7 @@ function SOAPage({ orders, soas, customers, peso, soaCustFilter, setSoaCustFilte
       ) : (
         <div className="empty-state" style={{ marginBottom: 24 }}>
           <div className="empty-title">No eligible orders</div>
-          <div className="empty-sub">Mark orders as "Sent" on the Orders page to make them eligible for SOA generation</div>
+          <div className="empty-sub">Orders must be marked as "Sent" and "Approved for SOA" on the Orders page</div>
         </div>
       )}
       {soas.length > 0 && (
@@ -1978,7 +2005,7 @@ function ExpensesPage({ expenses, isAdmin, peso, expenseSearch, setExpenseSearch
 
 // ── CLOCK IN/OUT ──
 function ClockPage({ appUsers, clockRecords, currentUser, clockForm, setClockForm, clockSearch, setClockSearch, onSubmit, onClockOut, onDelete }) {
-  const isAdmin = currentUser.role === 'admin'
+  const isAdmin = currentUser.role === 'admin' || currentUser.role === 'superadmin'
   const q = clockSearch.toLowerCase()
   const shown = [...clockRecords].reverse().filter(r => !q || r.userName.toLowerCase().includes(q))
   const totalHoursToday = clockRecords.filter(r => new Date(r.clockIn).toDateString() === new Date().toDateString() && r.totalHours).reduce((s, r) => s + r.totalHours, 0)
@@ -2216,6 +2243,93 @@ function ReportsPage({ orders, expenses, customers, services, cioRecords, broken
           </table></div></div>
         </>
       )}
+    </div>
+  )
+}
+
+// ── SUPER ADMIN ──
+function SuperAdminPage({ featureFlags, setFeatureFlags, appUsers }) {
+  const PAGE_LABELS = {
+    dashboard: 'Dashboard', inventory: 'Inventory', checkinout: 'Stock Log',
+    'tools-cio': 'Check-In/Out', orders: 'Orders', soa: 'SOA',
+    services: 'Services', customers: 'Customers', vendors: 'Vendors',
+    users: 'Users', expenses: 'Expenses', reports: 'Reports', clock: 'Clock In/Out'
+  }
+  const WIDGET_LABELS = {
+    financialValues: 'Financial Values (Revenue, Profit, Costs)',
+    stockValue: 'Inventory Stock Value',
+    avgPriceWidget: 'Average Price Widget (Services)',
+    customerStatus: 'Customer Status Column',
+    capacityWidget: 'Production Capacity Widget',
+    expensesWidget: 'Expenses Card on Dashboard',
+  }
+  const ROLE_COUNTS = {}
+  appUsers.forEach(u => { ROLE_COUNTS[u.role] = (ROLE_COUNTS[u.role] || 0) + 1 })
+
+  function togglePage(pageId) {
+    setFeatureFlags(f => ({ ...f, pages: { ...f.pages, [pageId]: !f.pages[pageId] } }))
+  }
+  function toggleWidget(key) {
+    setFeatureFlags(f => ({ ...f, widgets: { ...f.widgets, [key]: !f.widgets[key] } }))
+  }
+
+  return (
+    <div className="page">
+      <div className="section-header">
+        <div><div className="section-title">System Settings</div><div className="section-sub">Super Admin controls — page visibility &amp; widget toggles</div></div>
+      </div>
+
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
+        <div className="stat-card"><div className="stat-label">Total Users</div><div className="stat-val accent">{appUsers.length}</div></div>
+        {Object.entries(ROLE_COUNTS).map(([role, count]) => (
+          <div key={role} className="stat-card"><div className="stat-label">{role.charAt(0).toUpperCase() + role.slice(1)}s</div><div className="stat-val">{count}</div></div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 16 }}>
+        {/* Page Visibility */}
+        <div style={{ background: 'var(--dark3)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 20 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Page Visibility</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Toggle which pages are visible to non-super-admin users</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {Object.entries(PAGE_LABELS).map(([id, label]) => {
+              const enabled = featureFlags.pages[id] !== false
+              return (
+                <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, color: enabled ? 'var(--text1)' : 'var(--text3)' }}>{label}</span>
+                  <button onClick={() => togglePage(id)}
+                    style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', transition: 'background .2s', background: enabled ? 'var(--blue)' : 'var(--dark2)', position: 'relative' }}>
+                    <span style={{ position: 'absolute', top: 3, left: enabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s', display: 'block' }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Widget Visibility */}
+        <div style={{ background: 'var(--dark3)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 20 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Widget Visibility</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Control which data widgets are shown to non-admin users</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {Object.entries(WIDGET_LABELS).map(([key, label]) => {
+              const enabled = featureFlags.widgets[key] !== false
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <span style={{ fontSize: 13, color: enabled ? 'var(--text1)' : 'var(--text3)', flex: 1 }}>{label}</span>
+                  <button onClick={() => toggleWidget(key)}
+                    style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', transition: 'background .2s', background: enabled ? 'var(--blue)' : 'var(--dark2)', position: 'relative', flexShrink: 0 }}>
+                    <span style={{ position: 'absolute', top: 3, left: enabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s', display: 'block' }} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ marginTop: 16, padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-sm)', fontSize: 12, color: '#ef4444' }}>
+            Financial data visibility affects: Revenue, Profit, Stock Value, Order Totals. Disabling prevents these values from appearing for non-admin roles.
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ const _addDays = (iso, d) => { const dt = new Date(iso); dt.setDate(dt.getDate()
 export const DAILY_CAPACITY = 576 // blocks per day
 
 export const INITIAL_USERS = [
+  { id: 0, name: 'Super Admin', username: 'superadmin', password: 'super123', role: 'superadmin', lastLogin: new Date().toISOString(), status: 'Active' },
   { id: 1, name: 'Maria Santos', username: 'admin', password: 'admin123', role: 'admin', lastLogin: new Date().toISOString(), status: 'Active' },
   { id: 2, name: 'Juan Cruz', username: 'assistant', password: 'asst123', role: 'assistant', lastLogin: new Date().toISOString(), status: 'Active' },
   { id: 3, name: 'Pedro Reyes', username: 'operator', password: 'op123', role: 'operator', lastLogin: new Date().toISOString(), status: 'Active' },
@@ -36,13 +37,13 @@ export const INITIAL_CUSTOMERS = [
   { id: 5, name: 'Port Area Fisheries', contact: 'Jose Santos', phone: '0917-100-0005', email: '', area: 'Cebu Port', notes: '', soaStartNum: 1, invoiceStartNum: 1, olcStartNum: 1 },
 ]
 
-// Orders now include: deliveryStatus (Pending/Sent/Delivered), invoiced flag, dr_number, plate_number, created_by
+// Orders include: deliveryStatus, approved_for_invoicing, invoiced, dr_number, plate_number, created_by
 export const INITIAL_ORDERS = [
-  { id: 'ORD-001', customerId: 1, date: _cm(2), invoiceDate: _cm(2), dueDate: _addDays(_cm(2), 7), deliveryStatus: 'Delivered', dr_number: 'DR-001', plate_number: 'ABC 123', created_by: 'Maria Santos', created_at: _cm(2), invoiced: true, lines: [{ qty: 140, pricePerBlock: 25, serviceIds: [1] }], blocks: 140, pricePerBlock: 25, total: 3640, notes: '', status: 'Paid', payment: { method: 'Cash', date: _cm(3), checkNum: '', amount: 3640, staff: 'Maria Santos', notes: '', photo: null } },
-  { id: 'ORD-002', customerId: 2, date: _cm(3), invoiceDate: _cm(3), dueDate: _addDays(_cm(3), 7), deliveryStatus: 'Sent', dr_number: 'DR-002', plate_number: 'XYZ 456', created_by: 'Maria Santos', created_at: _cm(3), invoiced: false, lines: [{ qty: 150, pricePerBlock: 25, serviceIds: [1, 4] }], blocks: 150, pricePerBlock: 25, total: 4150, notes: '', status: 'Overdue', payment: null },
-  { id: 'ORD-003', customerId: 3, date: _cm(8), invoiceDate: _cm(8), dueDate: _addDays(_cm(8), 7), deliveryStatus: 'Sent', dr_number: 'DR-003', plate_number: '', created_by: 'Maria Santos', created_at: _cm(8), invoiced: false, lines: [{ qty: 100, pricePerBlock: 25, serviceIds: [2] }], blocks: 100, pricePerBlock: 25, total: 2820, notes: '', status: 'Unpaid', payment: null },
-  { id: 'ORD-004', customerId: 4, date: _cm(14), invoiceDate: _cm(14), dueDate: _addDays(_cm(14), 7), deliveryStatus: 'Pending', dr_number: '', plate_number: '', created_by: 'Maria Santos', created_at: _cm(14), invoiced: false, lines: [{ qty: 112, pricePerBlock: 25, serviceIds: [5] }], blocks: 112, pricePerBlock: 25, total: 2875, notes: 'Weekly supply', status: 'Unpaid', payment: null },
-  { id: 'ORD-005', customerId: 5, date: _cm(18), invoiceDate: _cm(18), dueDate: _addDays(_cm(18), 7), deliveryStatus: 'Pending', dr_number: '', plate_number: '', created_by: 'Maria Santos', created_at: _cm(18), invoiced: false, lines: [{ qty: 200, pricePerBlock: 25, serviceIds: [4] }], blocks: 200, pricePerBlock: 25, total: 5150, notes: '', status: 'Unpaid', payment: null },
+  { id: 'ORD-001', customerId: 1, date: _cm(2), invoiceDate: _cm(2), dueDate: _addDays(_cm(2), 7), deliveryStatus: 'Delivered', dr_number: 'DR-001', plate_number: 'ABC 123', created_by: 'Maria Santos', created_at: _cm(2), approved_for_invoicing: true, invoiced: true, lines: [{ qty: 140, pricePerBlock: 25, serviceIds: [1] }], blocks: 140, pricePerBlock: 25, total: 3640, notes: '', status: 'Paid', payment: { method: 'Cash', date: _cm(3), checkNum: '', amount: 3640, staff: 'Maria Santos', notes: '', photo: null } },
+  { id: 'ORD-002', customerId: 2, date: _cm(3), invoiceDate: _cm(3), dueDate: _addDays(_cm(3), 7), deliveryStatus: 'Sent', dr_number: 'DR-002', plate_number: 'XYZ 456', created_by: 'Maria Santos', created_at: _cm(3), approved_for_invoicing: true, invoiced: false, lines: [{ qty: 150, pricePerBlock: 25, serviceIds: [1, 4] }], blocks: 150, pricePerBlock: 25, total: 4150, notes: '', status: 'Overdue', payment: null },
+  { id: 'ORD-003', customerId: 3, date: _cm(8), invoiceDate: _cm(8), dueDate: _addDays(_cm(8), 7), deliveryStatus: 'Sent', dr_number: 'DR-003', plate_number: '', created_by: 'Maria Santos', created_at: _cm(8), approved_for_invoicing: false, invoiced: false, lines: [{ qty: 100, pricePerBlock: 25, serviceIds: [2] }], blocks: 100, pricePerBlock: 25, total: 2820, notes: '', status: 'Unpaid', payment: null },
+  { id: 'ORD-004', customerId: 4, date: _cm(14), invoiceDate: _cm(14), dueDate: _addDays(_cm(14), 7), deliveryStatus: 'Pending', dr_number: '', plate_number: '', created_by: 'Maria Santos', created_at: _cm(14), approved_for_invoicing: false, invoiced: false, lines: [{ qty: 112, pricePerBlock: 25, serviceIds: [5] }], blocks: 112, pricePerBlock: 25, total: 2875, notes: 'Weekly supply', status: 'Unpaid', payment: null },
+  { id: 'ORD-005', customerId: 5, date: _cm(18), invoiceDate: _cm(18), dueDate: _addDays(_cm(18), 7), deliveryStatus: 'Pending', dr_number: '', plate_number: '', created_by: 'Maria Santos', created_at: _cm(18), approved_for_invoicing: false, invoiced: false, lines: [{ qty: 200, pricePerBlock: 25, serviceIds: [4] }], blocks: 200, pricePerBlock: 25, total: 5150, notes: '', status: 'Unpaid', payment: null },
 ]
 
 export const INITIAL_CIO_RECORDS = [
@@ -87,6 +88,40 @@ export const INITIAL_BROKEN_ICE = [
 // SOAs (Statement of Account)
 export const INITIAL_SOAS = []
 
+// Feature flags — controlled by Super Admin
+export const INITIAL_FEATURE_FLAGS = {
+  pages: {
+    dashboard: true, inventory: true, checkinout: true, 'tools-cio': true,
+    orders: true, soa: true, services: true, customers: true, vendors: true,
+    users: true, expenses: true, reports: true, clock: true,
+  },
+  widgets: {
+    financialValues: true,   // revenue, profit, cost figures
+    stockValue: true,        // inventory value card
+    avgPriceWidget: true,    // average price on services page
+    customerStatus: true,    // status column on customers
+    capacityWidget: true,    // production capacity bar
+    expensesWidget: true,    // expenses card on dashboard
+  }
+}
+
+// All pages for superadmin
+export const ALL_PAGES = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'checkinout', label: 'Stock Log' },
+  { id: 'tools-cio', label: 'Check-In/Out' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'soa', label: 'SOA' },
+  { id: 'services', label: 'Services' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'vendors', label: 'Vendors' },
+  { id: 'users', label: 'Users' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'reports', label: 'Reports' },
+  { id: 'clock', label: 'Clock In/Out' },
+]
+
 // Tabs per role
 export const ADMIN_TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -113,15 +148,44 @@ export const ASSISTANT_TABS = [
   { id: 'services', label: 'Services' },
   { id: 'customers', label: 'Customers' },
   { id: 'vendors', label: 'Vendors' },
+  { id: 'users', label: 'Users' },
   { id: 'expenses', label: 'Expenses' },
   { id: 'reports', label: 'Reports' },
+  { id: 'clock', label: 'Clock In/Out' },
 ]
 
 export const OPERATOR_TABS = [
+  { id: 'inventory', label: 'Inventory' },
   { id: 'checkinout', label: 'Stock Log' },
+  { id: 'tools-cio', label: 'Check-In/Out' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'soa', label: 'SOA' },
+  { id: 'services', label: 'Services' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'vendors', label: 'Vendors' },
+  { id: 'users', label: 'Users' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'reports', label: 'Reports' },
   { id: 'clock', label: 'Clock In/Out' },
 ]
 
 export const STAFF_TABS = [
   { id: 'clock', label: 'Clock In/Out' },
+]
+
+export const SUPERADMIN_TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'inventory', label: 'Inventory' },
+  { id: 'checkinout', label: 'Stock Log' },
+  { id: 'tools-cio', label: 'Check-In/Out' },
+  { id: 'orders', label: 'Orders' },
+  { id: 'soa', label: 'SOA' },
+  { id: 'services', label: 'Services' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'vendors', label: 'Vendors' },
+  { id: 'users', label: 'Users' },
+  { id: 'expenses', label: 'Expenses' },
+  { id: 'reports', label: 'Reports' },
+  { id: 'clock', label: 'Clock In/Out' },
+  { id: 'superadmin', label: 'System Settings' },
 ]
